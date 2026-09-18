@@ -155,9 +155,13 @@ class LavaCanvasRenderer(
     private var tiltX = 0f
     private var tiltY = 0f
 
-    // Pincel para las Metaballs (Líquido)
+    // Variables para la agitación
+    private var lastAccelX = 0f
+    private var lastAccelY = 0f
+    private var lastAccelZ = 0f
+    private var agitation = 0f
+
     private val gooeyPaint = Paint().apply {
-        // Valores balanceados para que se unan bien pero SE DIVIDAN correctamente al alejarse
         val m = 50f
         val s = -255f * 24f
         colorFilter = ColorMatrixColorFilter(ColorMatrix(floatArrayOf(
@@ -208,7 +212,6 @@ class LavaCanvasRenderer(
                 val transparentColor = color and 0x00FFFFFF
                 blobPaints[color] = Paint().apply {
                     isAntiAlias = true
-                    // El degradado de 100f será escalado dinámicamente.
                     shader = RadialGradient(
                         0f, 0f, 100f,
                         color, transparentColor,
@@ -226,8 +229,31 @@ class LavaCanvasRenderer(
 
     override fun onSensorChanged(event: SensorEvent?) {
         if (event?.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
-            tiltX = -event.values[0] * 0.002f
-            tiltY = event.values[1] * 0.002f
+            val ax = event.values[0]
+            val ay = event.values[1]
+            val az = event.values[2]
+
+            // Calcular sacudida (agitar para dividir)
+            if (lastAccelX != 0f || lastAccelY != 0f) {
+                val dx = ax - lastAccelX
+                val dy = ay - lastAccelY
+                val dz = az - lastAccelZ
+                val shake = sqrt(dx * dx + dy * dy + dz * dz)
+                
+                // Si la sacudida es notable, aumentamos la agitación
+                if (shake > 3f) {
+                    agitation = (agitation + shake * 0.1f).coerceAtMost(3f)
+                }
+            }
+
+            lastAccelX = ax
+            lastAccelY = ay
+            lastAccelZ = az
+
+            // Atracción leve del giroscopio (aumentada de 0.002f a 0.004f)
+            // Esto permite que el movimiento de la muñeca se note un poquito más, pero sin jalar las gotas por completo.
+            tiltX = -ax * 0.004f
+            tiltY = ay * 0.004f
         }
     }
 
@@ -238,13 +264,13 @@ class LavaCanvasRenderer(
         val centerX = width / 2f
         val centerY = height / 2f
 
-        // SOLO 6 GOTAS GRANDES para un efecto de cera mucho más realista y grueso
-        for (i in 0 until 6) {
+        // Aumentado a 7 GOTAS GRANDES
+        for (i in 0 until 7) {
             blobs.add(
                 LavaBlob(
                     x = centerX + (Random.nextFloat() - 0.5f) * width * 0.5f,
                     y = centerY + (Random.nextFloat() - 0.5f) * height * 0.5f,
-                    radius = Random.nextFloat() * 25f + 45f, // Gotas enormes (45f a 70f)
+                    radius = Random.nextFloat() * 25f + 45f, 
                     colorIndex = i % 3,
                     buoyancy = if (Random.nextBoolean()) 1f else -1f,
                     targetBuoyancy = if (Random.nextBoolean()) 1f else -1f
@@ -289,34 +315,40 @@ class LavaCanvasRenderer(
             canvas.drawColor(currentTheme.bgColor)
             val screenRadius = width / 2f
 
+            agitation *= 0.95f
+
             // 1. Motor Físico (Desplazamiento Vertical Continuo)
             for (blob in blobs) {
-                // Lógica térmica: si llega muy abajo, quiere subir. Si llega muy arriba, quiere bajar.
                 if (blob.y > centerY + screenRadius * 0.35f) {
-                    blob.targetBuoyancy = -1.5f // Impulso hacia arriba
+                    blob.targetBuoyancy = -1.5f 
                 } else if (blob.y < centerY - screenRadius * 0.35f) {
-                    blob.targetBuoyancy = 1.5f  // Impulso hacia abajo
+                    blob.targetBuoyancy = 1.5f  
                 }
 
-                // Transición suave de la flotabilidad (se calienta/enfría lentamente)
-                blob.buoyancy += (blob.targetBuoyancy - blob.buoyancy) * 0.005f
+                // Cambio de flotabilidad un poco más rápido (0.008f)
+                blob.buoyancy += (blob.targetBuoyancy - blob.buoyancy) * 0.008f
 
-                // Aplicar fuerzas
-                blob.vy += blob.buoyancy * 0.03f
+                // Flotabilidad natural, fuerza direccional del giroscopio
+                // Velocidad vertical aumentada (0.04f)
+                blob.vy += blob.buoyancy * 0.04f
                 blob.vx += tiltX
                 blob.vy += tiltY
 
-                // Micro-movimiento horizontal aleatorio para que no suban en línea recta perfecta
-                blob.vx += (Random.nextFloat() - 0.5f) * 0.02f
+                // Si se detecta agitación fuerte, las gotas rebotan aleatoriamente un poquito para separarse
+                if (agitation > 0.1f) {
+                    blob.vx += (Random.nextFloat() - 0.5f) * agitation * 0.3f
+                    blob.vy += (Random.nextFloat() - 0.5f) * agitation * 0.3f
+                }
 
-                // Fricción pesada (Cera en aceite)
+                // Desplazamiento horizontal aleatorio aumentado (0.04f) para provocar más choques
+                blob.vx += (Random.nextFloat() - 0.5f) * 0.04f
+
                 blob.vx *= 0.90f
                 blob.vy *= 0.90f
 
                 blob.x += blob.vx
                 blob.y += blob.vy
 
-                // Rebote súper suave en los bordes para mantenerlas dentro de la pantalla
                 val dx = blob.x - centerX
                 val dy = blob.y - centerY
                 val distToCenter = sqrt((dx * dx + dy * dy).toDouble()).toFloat()
@@ -330,7 +362,7 @@ class LavaCanvasRenderer(
                 }
             }
 
-            // 2. Repulsión Suave (Para que se dividan y no se atrapen por siempre)
+            // 2. Repulsión (División y Choques)
             for (i in 0 until blobs.size) {
                 for (j in i + 1 until blobs.size) {
                     val b1 = blobs[i]
@@ -341,13 +373,17 @@ class LavaCanvasRenderer(
                     
                     val sameColor = b1.colorIndex % currentTheme.bubbleColors.size == b2.colorIndex % currentTheme.bubbleColors.size
                     
-                    // Permitimos que se superpongan bastante antes de repelerlas, 
-                    // lo que crea el efecto visual de unión temporal (metaballs).
-                    val minDist = if (sameColor) (b1.radius + b2.radius) * 0.5f else (b1.radius + b2.radius) * 0.9f
+                    val extraRepelDistance = agitation * 15f 
+                    // Distancia base de colisión modificada a 0.6f para que interactúen (choquen) un poquitito antes
+                    val baseMinDist = if (sameColor) (b1.radius + b2.radius) * 0.6f else (b1.radius + b2.radius) * 0.9f
+                    val effectiveMinDist = baseMinDist + extraRepelDistance
 
-                    if (dist < minDist && dist > 0f) {
-                        val overlap = minDist - dist
-                        val push = overlap * 0.005f // Repulsión muuuuy débil para que se deslicen lentamente
+                    if (dist < effectiveMinDist && dist > 0f) {
+                        val overlap = effectiveMinDist - dist
+                        
+                        val extraPush = if (agitation > 0.3f) agitation * 0.02f else 0f
+                        val push = (overlap * 0.005f) + extraPush
+                        
                         val nx = dx / dist
                         val ny = dy / dist
 
@@ -359,7 +395,7 @@ class LavaCanvasRenderer(
                 }
             }
 
-            // 3. Renderizado Gooey (Líquido perfecto y sin temblores)
+            // 3. Renderizado Gooey
             val colors = currentTheme.bubbleColors.distinct()
             
             for (color in colors) {
@@ -369,14 +405,10 @@ class LavaCanvasRenderer(
                 for (blob in blobs) {
                     if (currentTheme.bubbleColors[blob.colorIndex % currentTheme.bubbleColors.size] != color) continue
 
-                    // Para que el filtro corte el alpha exactamente donde queremos, 
-                    // el radio dibujado debe ser proporcional al radio deseado.
-                    // Con m=50 y s=-12240, el corte es al ~48% del radio.
                     val scale = blob.radius / 48f
 
                     canvas.save()
                     canvas.translate(blob.x, blob.y)
-                    // CERO ROTACIÓN, CERO DEFORMACIÓN ARTIFICIAL. Todo el trabajo elástico lo hace el filtro al cruzarse.
                     canvas.scale(scale, scale)
                     canvas.drawCircle(0f, 0f, 100f, paint)
                     canvas.restore()
