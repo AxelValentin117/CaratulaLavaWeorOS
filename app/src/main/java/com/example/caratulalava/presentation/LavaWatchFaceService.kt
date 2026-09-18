@@ -250,10 +250,10 @@ class LavaCanvasRenderer(
             lastAccelY = ay
             lastAccelZ = az
 
-            // Atracción leve del giroscopio (aumentada de 0.002f a 0.004f)
+            // Atracción leve del giroscopio (aumentada de 0.004f a 0.006f)
             // Esto permite que el movimiento de la muñeca se note un poquito más, pero sin jalar las gotas por completo.
-            tiltX = -ax * 0.004f
-            tiltY = ay * 0.004f
+            tiltX = -ax * 0.006f
+            tiltY = ay * 0.006f
         }
     }
 
@@ -264,14 +264,14 @@ class LavaCanvasRenderer(
         val centerX = width / 2f
         val centerY = height / 2f
 
-        // Aumentado a 7 GOTAS GRANDES
-        for (i in 0 until 7) {
+        // Aumentado a 9 GOTAS GRANDES
+        for (i in 0 until 9) {
             blobs.add(
                 LavaBlob(
                     x = centerX + (Random.nextFloat() - 0.5f) * width * 0.5f,
                     y = centerY + (Random.nextFloat() - 0.5f) * height * 0.5f,
                     radius = Random.nextFloat() * 25f + 45f, 
-                    colorIndex = i % 3,
+                    colorIndex = i % 4, // Ahora iteramos sobre los 4 colores disponibles en el tema
                     buoyancy = if (Random.nextBoolean()) 1f else -1f,
                     targetBuoyancy = if (Random.nextBoolean()) 1f else -1f
                 )
@@ -325,12 +325,12 @@ class LavaCanvasRenderer(
                     blob.targetBuoyancy = 1.5f  
                 }
 
-                // Cambio de flotabilidad un poco más rápido (0.008f)
-                blob.buoyancy += (blob.targetBuoyancy - blob.buoyancy) * 0.008f
+                // Cambio de flotabilidad un poco más rápido (0.012f)
+                blob.buoyancy += (blob.targetBuoyancy - blob.buoyancy) * 0.012f
 
                 // Flotabilidad natural, fuerza direccional del giroscopio
-                // Velocidad vertical aumentada (0.04f)
-                blob.vy += blob.buoyancy * 0.04f
+                // Velocidad vertical aumentada (0.065f) para que se muevan más
+                blob.vy += blob.buoyancy * 0.065f
                 blob.vx += tiltX
                 blob.vy += tiltY
 
@@ -340,8 +340,8 @@ class LavaCanvasRenderer(
                     blob.vy += (Random.nextFloat() - 0.5f) * agitation * 0.3f
                 }
 
-                // Desplazamiento horizontal aleatorio aumentado (0.04f) para provocar más choques
-                blob.vx += (Random.nextFloat() - 0.5f) * 0.04f
+                // Desplazamiento horizontal aleatorio aumentado (0.06f) para provocar más choques
+                blob.vx += (Random.nextFloat() - 0.5f) * 0.06f
 
                 blob.vx *= 0.90f
                 blob.vy *= 0.90f
