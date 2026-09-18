@@ -5,17 +5,14 @@ plugins {
 
 android {
     namespace = "com.example.caratulalava"
-    compileSdk {
-        version = release(37)
-    }
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.caratulalava"
         minSdk = 30
-        targetSdk = 37
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-
     }
 
     buildTypes {
@@ -29,7 +26,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    useLibrary("wear-sdk")
     buildFeatures {
         compose = true
     }

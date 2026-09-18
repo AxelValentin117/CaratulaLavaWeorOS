@@ -1,4 +1,9 @@
 <resources>
     <string name="app_name">CaratulaLava</string>
     <string name="hello_world">Hello, %1$s!</string>
+    <string name="theme_setting_name">Tema de Lava</string>
+    <string name="theme_setting_description">Selecciona el color del fondo y la lava</string>
+    <string name="theme_magma">Magma Clásico</string>
+    <string name="theme_toxic_green">Verde Radiactivo</string>
+    <string name="theme_cyber_blue">Océano Neón</string>
 </resources>
