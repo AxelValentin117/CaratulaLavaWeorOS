@@ -208,18 +208,48 @@ class LavaCanvasRenderer(
         }
     }
 
+    private fun blendColors(color1: Int, color2: Int, ratio: Float): Int {
+        val inverseRatio = 1f - ratio
+        val r = (Color.red(color1) * inverseRatio + Color.red(color2) * ratio).toInt()
+        val g = (Color.green(color1) * inverseRatio + Color.green(color2) * ratio).toInt()
+        val b = (Color.blue(color1) * inverseRatio + Color.blue(color2) * ratio).toInt()
+        return Color.rgb(r, g, b)
+    }
+
     private fun updatePaints() {
         blobPaints.clear()
         for (color in currentTheme.bubbleColors) {
             if (!blobPaints.containsKey(color)) {
-                val transparentColor = color and 0x00FFFFFF
+                // Generamos los colores para dar la ilusión de volumen 3D y luz
+                val lightColor = blendColors(color, Color.WHITE, 0.75f) // Brillo especular fuerte
+                val midColor = blendColors(color, Color.WHITE, 0.1f)    // Color base translúcido
+                val darkColor = blendColors(color, Color.BLACK, 0.6f)   // Sombra de profundidad en los bordes
+
+                // Shader 1: Iluminación 3D. Simulamos una luz golpeando desde arriba a la izquierda (-15, -15)
+                val colorShader = RadialGradient(
+                    -15f, -15f, 60f,
+                    intArrayOf(lightColor, midColor, darkColor),
+                    floatArrayOf(0f, 0.35f, 1f),
+                    Shader.TileMode.CLAMP
+                )
+
+                // Shader 2: Forma. Conservamos el degradado de transparencia (Alpha) necesario para que funcione la fusión líquida.
+                val shapeShader = RadialGradient(
+                    0f, 0f, 100f,
+                    Color.WHITE, Color.TRANSPARENT,
+                    Shader.TileMode.CLAMP
+                )
+
+                // Combinamos los Shaders: Usamos los colores 3D, pero los recortamos con la forma redonda
+                val composeShader = android.graphics.ComposeShader(
+                    colorShader,
+                    shapeShader,
+                    android.graphics.PorterDuff.Mode.DST_IN
+                )
+
                 blobPaints[color] = Paint().apply {
                     isAntiAlias = true
-                    shader = RadialGradient(
-                        0f, 0f, 100f,
-                        color, transparentColor,
-                        Shader.TileMode.CLAMP
-                    )
+                    shader = composeShader
                 }
             }
         }
