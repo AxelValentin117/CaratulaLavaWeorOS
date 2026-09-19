@@ -9,6 +9,7 @@ import android.graphics.Paint
 import android.graphics.RadialGradient
 import android.graphics.Rect
 import android.graphics.Shader
+import android.graphics.Typeface
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -177,11 +178,12 @@ class LavaCanvasRenderer(
 
     private val blobPaints = mutableMapOf<Int, Paint>()
 
+    private lateinit var customTypeface: Typeface
+
     private val timePaint = Paint().apply {
         isAntiAlias = true
         textAlign = Paint.Align.CENTER
-        textSize = 80f
-        isFakeBoldText = true
+        textSize = 100f // Un poco más grande para esta fuente decorativa
     }
 
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
@@ -194,6 +196,15 @@ class LavaCanvasRenderer(
     init {
         accelerometer?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+        }
+        
+        // Cargar fuente personalizada gruesa desde assets
+        try {
+            customTypeface = Typeface.createFromAsset(context.assets, "fonts/Shrikhand-Regular.ttf")
+            timePaint.typeface = customTypeface
+        } catch (e: Exception) {
+            // Fallback si no carga por alguna razón
+            timePaint.typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
         }
 
         coroutineScope.launch {
@@ -220,27 +231,40 @@ class LavaCanvasRenderer(
         blobPaints.clear()
         for (color in currentTheme.bubbleColors) {
             if (!blobPaints.containsKey(color)) {
-                // Generamos los colores para dar la ilusión de volumen 3D y luz
-                val lightColor = blendColors(color, Color.WHITE, 0.75f) // Brillo especular fuerte
-                val midColor = blendColors(color, Color.WHITE, 0.1f)    // Color base translúcido
-                val darkColor = blendColors(color, Color.BLACK, 0.6f)   // Sombra de profundidad en los bordes
+                
+                // 1. Color translúcido: Para la fusión metaball (Gooy filter)
+                val transparentColor = color and 0x00FFFFFF
+                
+                // 2. Colores de la lámpara de lava (Cera derretida)
+                // Usamos colores muy similares para evitar un "efecto plástico" o brillo falso.
+                // En su lugar, simulamos el resplandor desde ATRÁS de la cera (Backlight)
+                
+                // Núcleo caliente brillante (luz pasando a través de la cera)
+                val coreColor = blendColors(color, Color.WHITE, 0.25f) 
+                
+                // Cuerpo de la cera (color original)
+                val bodyColor = color 
+                
+                // Borde sombreado leve, donde la cera es más densa y opaca
+                val edgeColor = blendColors(color, currentTheme.bgColor, 0.4f) 
 
-                // Shader 1: Iluminación 3D. Simulamos una luz golpeando desde arriba a la izquierda (-15, -15)
+                // Creamos la ilusión de volumen usando un gradiente radial.
+                // La luz intensa viene desde el "fondo" (centro) hacia los bordes.
                 val colorShader = RadialGradient(
-                    -15f, -15f, 60f,
-                    intArrayOf(lightColor, midColor, darkColor),
-                    floatArrayOf(0f, 0.35f, 1f),
+                    0f, 0f, 60f,
+                    intArrayOf(coreColor, bodyColor, edgeColor),
+                    floatArrayOf(0f, 0.5f, 1f),
                     Shader.TileMode.CLAMP
                 )
 
-                // Shader 2: Forma. Conservamos el degradado de transparencia (Alpha) necesario para que funcione la fusión líquida.
+                // Máscara suave para el efecto de unión viscosa
                 val shapeShader = RadialGradient(
                     0f, 0f, 100f,
                     Color.WHITE, Color.TRANSPARENT,
                     Shader.TileMode.CLAMP
                 )
 
-                // Combinamos los Shaders: Usamos los colores 3D, pero los recortamos con la forma redonda
+                // Combinamos textura y forma
                 val composeShader = android.graphics.ComposeShader(
                     colorShader,
                     shapeShader,
