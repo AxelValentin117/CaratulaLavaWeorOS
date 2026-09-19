@@ -162,8 +162,11 @@ class LavaCanvasRenderer(
     private var agitation = 0f
 
     private val gooeyPaint = Paint().apply {
-        val m = 50f
-        val s = -255f * 24f
+        // m=80 y s=-48 aumentan masivamente el "aura" invisible de las gotas.
+        // Esto hace que la fusión (metaballs) sea mucho más gruesa y deforme los círculos
+        // convirtiéndolos en un solo óvalo o masa líquida.
+        val m = 80f
+        val s = -255f * 48f
         colorFilter = ColorMatrixColorFilter(ColorMatrix(floatArrayOf(
             1f, 0f, 0f, 0f, 0f,
             0f, 1f, 0f, 0f, 0f,
@@ -362,7 +365,7 @@ class LavaCanvasRenderer(
                 }
             }
 
-            // 2. Repulsión (División y Choques)
+            // 2. Tensión Superficial, Fusión y Repulsión
             for (i in 0 until blobs.size) {
                 for (j in i + 1 until blobs.size) {
                     val b1 = blobs[i]
@@ -373,24 +376,50 @@ class LavaCanvasRenderer(
                     
                     val sameColor = b1.colorIndex % currentTheme.bubbleColors.size == b2.colorIndex % currentTheme.bubbleColors.size
                     
-                    val extraRepelDistance = agitation * 15f 
-                    // Distancia base de colisión modificada a 0.6f para que interactúen (choquen) un poquitito antes
-                    val baseMinDist = if (sameColor) (b1.radius + b2.radius) * 0.6f else (b1.radius + b2.radius) * 0.9f
-                    val effectiveMinDist = baseMinDist + extraRepelDistance
-
-                    if (dist < effectiveMinDist && dist > 0f) {
-                        val overlap = effectiveMinDist - dist
+                    if (sameColor) {
+                        // Tensión superficial para gotas del mismo color (Se atraen para formar masas grandes)
+                        val mergeDist = (b1.radius + b2.radius) * 1.3f
+                        val repelDist = (b1.radius + b2.radius) * 0.45f + (agitation * 15f)
                         
-                        val extraPush = if (agitation > 0.3f) agitation * 0.02f else 0f
-                        val push = (overlap * 0.005f) + extraPush
-                        
-                        val nx = dx / dist
-                        val ny = dy / dist
-
-                        b1.vx -= nx * push
-                        b1.vy -= ny * push
-                        b2.vx += nx * push
-                        b2.vy += ny * push
+                        if (dist < mergeDist && dist > repelDist) {
+                            // Atracción (se quieren juntar). Si se agita la muñeca, se rompe esta fuerza
+                            if (agitation < 0.2f) {
+                                val pull = (mergeDist - dist) * 0.0012f
+                                val nx = dx / dist
+                                val ny = dy / dist
+                                b1.vx += nx * pull
+                                b1.vy += ny * pull
+                                b2.vx -= nx * pull
+                                b2.vy -= ny * pull
+                            }
+                        } else if (dist <= repelDist && dist > 0f) {
+                            // Repulsión en el núcleo (para que no colapsen en un solo punto, sino que formen un cacahuate u óvalo)
+                            val overlap = repelDist - dist
+                            val extraPush = if (agitation > 0.3f) agitation * 0.03f else 0f
+                            val push = (overlap * 0.005f) + extraPush
+                            
+                            val nx = dx / dist
+                            val ny = dy / dist
+                            b1.vx -= nx * push
+                            b1.vy -= ny * push
+                            b2.vx += nx * push
+                            b2.vy += ny * push
+                        }
+                    } else {
+                        // Distinto color: Se repelen como agua y aceite
+                        val repelDist = (b1.radius + b2.radius) * 0.9f + (agitation * 15f)
+                        if (dist < repelDist && dist > 0f) {
+                            val overlap = repelDist - dist
+                            val extraPush = if (agitation > 0.3f) agitation * 0.02f else 0f
+                            val push = (overlap * 0.006f) + extraPush
+                            
+                            val nx = dx / dist
+                            val ny = dy / dist
+                            b1.vx -= nx * push
+                            b1.vy -= ny * push
+                            b2.vx += nx * push
+                            b2.vy += ny * push
+                        }
                     }
                 }
             }
@@ -405,7 +434,8 @@ class LavaCanvasRenderer(
                 for (blob in blobs) {
                     if (currentTheme.bubbleColors[blob.colorIndex % currentTheme.bubbleColors.size] != color) continue
 
-                    val scale = blob.radius / 48f
+                    // Con m=80 y s=-48, el límite de opacidad (60%) cae exactamente en la distancia 40.
+                    val scale = blob.radius / 40f
 
                     canvas.save()
                     canvas.translate(blob.x, blob.y)
